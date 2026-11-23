@@ -45,7 +45,6 @@ class _SignInScreenState extends State<SignInScreen> {
         padding: EdgeInsets.zero,
         children: [
           HeroHeader(
-            imageAsset: 'assets/images/campus.jpg',
             padding: const EdgeInsets.fromLTRB(24, 12, 24, 44),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,

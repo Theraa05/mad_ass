@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'screens/assign_technician_screen.dart';
 import 'screens/contributions_screen.dart';
 import 'screens/home_screen.dart';
 import 'screens/impact_photos_screen.dart';
@@ -12,11 +13,10 @@ import 'screens/settings_screen.dart';
 import 'screens/sign_in_screen.dart';
 import 'screens/submitted_screen.dart';
 
-/// Route names in one place so screens never use raw strings.
 class AppRoutes {
   static const signIn = '/';
 
-  // Reporter (students and anyone reporting an issue)
+  // Reporter screens
   static const home = '/home';
   static const myReports = '/my-reports';
   static const scan = '/scan';
@@ -25,9 +25,11 @@ class AppRoutes {
   static const submitted = '/submitted';
   static const contributions = '/contributions';
 
-  // Management
+  // Coordinator screens
   static const management = '/manage';
-  static const manageReport = '/manage/report'; // arguments: report id (String)
+  static const manageReport = '/manage/report';
+  static const assignTechnician = '/manage/assign';
+  static const repairSchedule = '/manage/schedule-preview';
 
   static const settings = '/settings';
 
@@ -40,8 +42,12 @@ class AppRoutes {
     impact: (_) => const ImpactPhotosScreen(),
     submitted: (_) => const SubmittedScreen(),
     contributions: (_) => const ContributionsScreen(),
+
     management: (_) => const ManagementDashboardScreen(),
     manageReport: (_) => const ManagementReportScreen(),
+    assignTechnician: (_) => const AssignTechnicianScreen(),
+    repairSchedule: (_) => const RepairScheduleScreen(),
+
     settings: (_) => const SettingsScreen(),
   };
 }
