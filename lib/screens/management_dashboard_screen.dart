@@ -45,7 +45,6 @@ class _ManagementDashboardScreenState
             padding: EdgeInsets.zero,
             children: [
               HeroHeader(
-                imageAsset: 'assets/images/campus.jpg',
                 padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
