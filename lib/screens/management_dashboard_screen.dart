@@ -49,6 +49,19 @@ class _ManagementDashboardScreenState
     );
   }
 
+  void _openRepairFeedback(ReportStore store) {
+    final pending = store.pendingRepairFeedbacks;
+    if (pending.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No repair feedback is awaiting review.')),
+      );
+      return;
+    }
+    final report = store.reportForFeedback(pending.first);
+    if (report == null) return;
+    Navigator.pushNamed(context, AppRoutes.manageReport, arguments: report.id);
+  }
+
   void _clearFilters() {
     setState(() {
       _search.clear();
@@ -323,6 +336,23 @@ class _ManagementDashboardScreenState
                             label: Text(
                               'Verify Repairs '
                                   '(${store.pendingVerifications.length})',
+                            ),
+                          ),
+
+                          const SizedBox(height: 16),
+
+                          FilledButton.icon(
+                            key: const ValueKey('review-repair-feedback'),
+                            style: FilledButton.styleFrom(
+                              backgroundColor: Colors.white,
+                              foregroundColor: TarumtColors.primary,
+                              minimumSize: const Size.fromHeight(52),
+                            ),
+                            onPressed: () => _openRepairFeedback(store),
+                            icon: const Icon(Icons.rate_review_outlined),
+                            label: Text(
+                              'Repair Feedback '
+                              '(${store.pendingRepairFeedbacks.length})',
                             ),
                           ),
 

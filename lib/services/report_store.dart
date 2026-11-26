@@ -258,6 +258,92 @@ class ReportStore extends ChangeNotifier {
     return report;
   }
 
+  ClarificationMessage? pendingClarification(String id) {
+    final report = byId(id);
+    if (report == null) return null;
+    if (report.clarificationMessages.isEmpty) {
+      final note = report.managerNote?.trim();
+      if (report.status == ReportStatus.needsInfo &&
+          note != null &&
+          note.isNotEmpty) {
+        return ClarificationMessage(text: note, fromCoordinator: true);
+      }
+      return null;
+    }
+    final message = report.clarificationMessages.last;
+    return message.fromCoordinator ? message : null;
+  }
+
+  void submitClarificationReply(
+    String id, {
+    required String reply,
+    Uint8List? photo,
+  }) {
+    final report = byId(id);
+    final user = AuthService.current;
+
+    if (user == null || user.role != UserRole.reporter) {
+      throw StateError('Reporter access is required.');
+    }
+
+    if (report == null || report.reporterEmail != user.email) {
+      throw StateError('Only the report owner can reply.');
+    }
+
+    final text = reply.trim();
+    if (text.isEmpty || text.length > 1000) {
+      throw ArgumentError('Enter a reply of 1–1000 characters.');
+    }
+
+    final request = pendingClarification(id);
+    if (request == null || report.status != ReportStatus.needsInfo) {
+      throw StateError('This report has no clarification awaiting a reply.');
+    }
+
+    if (request.photoRequested && photo == null) {
+      throw ArgumentError('Attach the requested photo before replying.');
+    }
+
+    _validateReporterPhoto(photo);
+    final now = DateTime.now();
+    report.clarificationMessages.add(
+      ClarificationMessage(
+        text: text,
+        authorEmail: user.email,
+        sentAt: now,
+        fromCoordinator: false,
+        photo: photo,
+      ),
+    );
+    report.status = ReportStatus.underReview;
+    report.updatedAt = now;
+    notifyListeners();
+  }
+
+  static void _validateReporterPhoto(Uint8List? photo) {
+    if (photo == null) return;
+
+    final png =
+        photo.length >= 8 &&
+        photo[0] == 137 &&
+        photo[1] == 80 &&
+        photo[2] == 78 &&
+        photo[3] == 71 &&
+        photo[4] == 13 &&
+        photo[5] == 10 &&
+        photo[6] == 26 &&
+        photo[7] == 10;
+    final jpeg =
+        photo.length >= 3 &&
+        photo[0] == 255 &&
+        photo[1] == 216 &&
+        photo[2] == 255;
+
+    if (photo.length > 5 * 1024 * 1024 || (!png && !jpeg)) {
+      throw ArgumentError('Attach a JPG or PNG photo, up to 5 MB.');
+    }
+  }
+
   // ---------- Work orders and technicians ----------
 
   List<WorkOrder> get workOrders {
@@ -694,6 +780,192 @@ class ReportStore extends ChangeNotifier {
     });
 
     return orders;
+  }
+
+  List<RepairFeedback> get pendingRepairFeedbacks {
+    final feedback = <RepairFeedback>[];
+    for (final report in _reports) {
+      feedback.addAll(
+        report.repairFeedback.where((item) => item.isPendingReview),
+      );
+    }
+    feedback.sort((a, b) => a.submittedAt.compareTo(b.submittedAt));
+    return List<RepairFeedback>.unmodifiable(feedback);
+  }
+
+  Report? reportForFeedback(RepairFeedback feedback) {
+    for (final report in _reports) {
+      if (report.repairFeedback.contains(feedback)) return report;
+    }
+    return null;
+  }
+
+  RepairFeedback submitRepairFeedback(
+    String reportId, {
+    required RepairFeedbackOutcome outcome,
+    String comment = '',
+    Uint8List? photo,
+  }) {
+    final report = byId(reportId);
+    final user = AuthService.current;
+
+    if (user == null || user.role != UserRole.reporter) {
+      throw StateError('Reporter access is required.');
+    }
+    if (report == null || report.reporterEmail != user.email) {
+      throw StateError('Only the report owner can submit feedback.');
+    }
+    if (report.workOrderId == null || report.status != ReportStatus.resolved) {
+      throw StateError('Feedback is available after Coordinator approval.');
+    }
+
+    final order = workOrderById(report.workOrderId!);
+    final submission = order?.latestSubmission;
+    RepairInspection? approved;
+    if (order != null && submission != null) {
+      for (final inspection in order.inspections.reversed) {
+        if (inspection.submissionNumber == submission.number &&
+            inspection.decision == InspectionDecision.approved) {
+          approved = inspection;
+          break;
+        }
+      }
+    }
+    if (order == null || submission == null || approved == null) {
+      throw StateError('Feedback is available after Coordinator approval.');
+    }
+    if (report.repairFeedback.any(
+      (item) =>
+          item.workOrderId == order.id &&
+          item.submissionNumber == submission.number,
+    )) {
+      throw StateError('Feedback was already submitted for this repair.');
+    }
+
+    final text = comment.trim();
+    if (outcome == RepairFeedbackOutcome.stillNotWorking && text.isEmpty) {
+      throw ArgumentError('Explain what is still not working.');
+    }
+    if (text.length > 1000) {
+      throw ArgumentError('Enter a comment of no more than 1000 characters.');
+    }
+    _validateReporterPhoto(photo);
+
+    final feedback = RepairFeedback(
+      workOrderId: order.id,
+      submissionNumber: submission.number,
+      outcome: outcome,
+      comment: text,
+      photo: photo,
+      submittedBy: user.email,
+      submittedAt: DateTime.now(),
+    );
+    report.repairFeedback.add(feedback);
+    notifyListeners();
+    return feedback;
+  }
+
+  void markRepairFeedbackReviewed(
+    String reportId, {
+    String? workOrderId,
+    int? submissionNumber,
+  }) {
+    _requireCoordinator();
+    final report = byId(reportId);
+    if (report == null) throw StateError('Report not found.');
+    final feedback = report.repairFeedback.firstWhere(
+      (item) =>
+          item.isPendingReview &&
+          (workOrderId == null || item.workOrderId == workOrderId) &&
+          (submissionNumber == null ||
+              item.submissionNumber == submissionNumber),
+      orElse: () => throw StateError('No feedback is awaiting review.'),
+    );
+    feedback.reviewedBy = AuthService.current!.email;
+    feedback.reviewedAt = DateTime.now();
+    notifyListeners();
+  }
+
+  List<ReportTimelineEvent> timelineForReport(String reportId) {
+    final report = byId(reportId);
+    if (report == null) return const [];
+
+    final events = <ReportTimelineEvent>[
+      ReportTimelineEvent(
+        title: 'Report submitted',
+        detail: report.description,
+        at: report.createdAt,
+      ),
+    ];
+    for (final message in report.clarificationMessages) {
+      events.add(
+        ReportTimelineEvent(
+          title: message.fromCoordinator
+              ? 'Coordinator requested information'
+              : 'Reporter provided information',
+          detail: message.text,
+          at: message.sentAt,
+        ),
+      );
+    }
+    if (report.clarificationMessages.isEmpty &&
+        report.status == ReportStatus.needsInfo &&
+        report.managerNote?.trim().isNotEmpty == true) {
+      events.add(
+        ReportTimelineEvent(
+          title: 'Coordinator requested information',
+          detail: report.managerNote!.trim(),
+        ),
+      );
+    }
+    final order = report.workOrderId == null
+        ? null
+        : workOrderById(report.workOrderId!);
+    if (order != null) {
+      events.add(
+        ReportTimelineEvent(
+          title: 'Technician assigned',
+          detail: order.id,
+          at: order.assignedAt,
+        ),
+      );
+      for (final change in order.scheduleChanges) {
+        events.add(
+          ReportTimelineEvent(
+            title: 'Schedule adjusted',
+            detail: change.reason,
+            at: change.changedAt,
+          ),
+        );
+      }
+      for (final submission in order.submissions) {
+        events.add(
+          ReportTimelineEvent(
+            title: 'Technician submitted completion',
+            detail: submission.repairNote,
+            at: submission.submittedAt,
+          ),
+        );
+      }
+      for (final inspection in order.inspections) {
+        events.add(
+          ReportTimelineEvent(
+            title: inspection.decision == InspectionDecision.approved
+                ? 'Coordinator approved repair'
+                : 'Coordinator returned repair for rework',
+            detail: inspection.note,
+            at: inspection.inspectedAt,
+          ),
+        );
+      }
+    }
+    events.sort((a, b) {
+      if (a.at == null && b.at == null) return 0;
+      if (a.at == null) return -1;
+      if (b.at == null) return 1;
+      return a.at!.compareTo(b.at!);
+    });
+    return List<ReportTimelineEvent>.unmodifiable(events);
   }
 
   WorkOrder _existingOrder(String id) {

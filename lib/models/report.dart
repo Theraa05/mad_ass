@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 
 import '../data/categories.dart';
@@ -95,6 +97,7 @@ class ClarificationMessage {
   final DateTime? sentAt;
   final bool fromCoordinator;
   final bool photoRequested;
+  final Uint8List? photo;
 
   const ClarificationMessage({
     required this.text,
@@ -102,6 +105,50 @@ class ClarificationMessage {
     this.authorEmail,
     this.sentAt,
     this.photoRequested = false,
+    this.photo,
+  });
+}
+
+enum RepairFeedbackOutcome {
+  works, stillNotWorking
+}
+
+class RepairFeedback {
+  final String workOrderId;
+  final int submissionNumber;
+  final RepairFeedbackOutcome outcome;
+  final String comment;
+  final Uint8List? photo;
+  final String submittedBy;
+  final DateTime submittedAt;
+  String? reviewedBy;
+  DateTime? reviewedAt;
+
+  RepairFeedback({
+    required this.workOrderId,
+    required this.submissionNumber,
+    required this.outcome,
+    required this.comment,
+    required Uint8List? photo,
+    required this.submittedBy,
+    required this.submittedAt,
+  }) : photo = photo == null
+           ? null
+           : Uint8List.fromList(photo).asUnmodifiableView();
+
+  bool get isPendingReview => stillNotWorking && reviewedAt == null;
+  bool get stillNotWorking => outcome == RepairFeedbackOutcome.stillNotWorking;
+}
+
+class ReportTimelineEvent {
+  final String title;
+  final String detail;
+  final DateTime? at;
+
+  const ReportTimelineEvent({
+    required this.title,
+    required this.detail,
+    this.at,
   });
 }
 
@@ -133,6 +180,7 @@ class Report {
   String? workOrderId;
 
   final List<ClarificationMessage> clarificationMessages = [];
+  final List<RepairFeedback> repairFeedback = [];
 
   Report({
     required this.id,

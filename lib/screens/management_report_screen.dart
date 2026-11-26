@@ -211,6 +211,19 @@ class _ManagementReportScreenState
     }
   }
 
+  void _reviewFeedback(Report report, RepairFeedback feedback) {
+    try {
+      ReportStore.instance.markRepairFeedbackReviewed(
+        report.id,
+        workOrderId: feedback.workOrderId,
+        submissionNumber: feedback.submissionNumber,
+      );
+      _showError('Repair feedback marked as reviewed.');
+    } on StateError catch (error) {
+      _showError(error.message);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final user = AuthService.current;
@@ -669,6 +682,19 @@ class _ManagementReportScreenState
                                 const SizedBox(height: 10),
                                 Text(message.text),
 
+                                if (message.photo != null) ...[
+                                  const SizedBox(height: 10),
+                                  ClipRRect(
+                                    borderRadius: BorderRadius.circular(10),
+                                    child: Image.memory(
+                                      message.photo!,
+                                      height: 150,
+                                      width: double.infinity,
+                                      fit: BoxFit.cover,
+                                    ),
+                                  ),
+                                ],
+
                                 if (message.photoRequested) ...[
                                   const SizedBox(height: 8),
                                   const Text(
@@ -685,6 +711,74 @@ class _ManagementReportScreenState
                             ),
                           ),
                         ),
+
+                    if (report.repairFeedback.isNotEmpty) ...[
+                      const SectionTitle('Repair feedback'),
+                      for (final feedback in report.repairFeedback)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 10),
+                          child: AppCard(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  feedback.stillNotWorking
+                                      ? 'Still Not Working'
+                                      : 'Yes, It Works',
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                                ),
+                                const SizedBox(height: 5),
+                                Text(
+                                  feedback.comment.isEmpty
+                                      ? 'No comment provided.'
+                                      : feedback.comment,
+                                ),
+                                const SizedBox(height: 6),
+                                Text(
+                                  '${feedback.submittedBy} · ${_stamp(context, feedback.submittedAt)}',
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    color: TarumtColors.muted,
+                                  ),
+                                ),
+                                if (feedback.photo != null) ...[
+                                  const SizedBox(height: 10),
+                                  ClipRRect(
+                                    borderRadius: BorderRadius.circular(10),
+                                    child: Image.memory(
+                                      feedback.photo!,
+                                      height: 150,
+                                      width: double.infinity,
+                                      fit: BoxFit.cover,
+                                    ),
+                                  ),
+                                ],
+                                const SizedBox(height: 8),
+                                if (feedback.isPendingReview)
+                                  FilledButton.icon(
+                                        key: ValueKey(
+                                          'review-feedback-${report.id}',
+                                        ),
+                                        onPressed: () =>
+                                            _reviewFeedback(report, feedback),
+                                        icon: const Icon(Icons.done_rounded),
+                                        label: const Text('Mark as reviewed'),
+                                      )
+                                else if (feedback.reviewedAt != null)
+                                  Text(
+                                        'Reviewed ${_stamp(context, feedback.reviewedAt!)}',
+                                        style: const TextStyle(
+                                          color: TarumtColors.success,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                              ],
+                            ),
+                          ),
+                        ),
+                    ],
                   ],
                 ),
               ),
